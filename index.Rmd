@@ -1,0 +1,105 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Koji"
+date: "2021/12/31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{Course Project}
+# Clearing Global Environment
+rm(list=ls())
+
+# The necessary packages
+library(caret);library(skimr);library(dplyr);library(ranger);library(rattle);library(xgboost)
+
+# Importing train&test set
+trainset<-read.csv("pml-training.csv",na.strings = c("","NA"))
+testset<-read.csv("pml-testing.csv",na.strings = c("","NA"))
+
+# Excluding the unnecessary rows
+#-1 rows with any NAs
+trainset<-trainset%>%select_if(~!any(is.na(.)))
+testset<-testset%>%select_if(~!any(is.na(.)))
+#-2 user_name, cvtd_timestamp, new_window,x,raw_timestamp_part_1,raw_timestamp_part_2,num_window
+trainset<-subset(trainset,select=-c(user_name,cvtd_timestamp,new_window,X,raw_timestamp_part_1,raw_timestamp_part_2,num_window))
+testset<-subset(testset,select=-c(user_name,cvtd_timestamp,new_window,X,raw_timestamp_part_1,raw_timestamp_part_2,num_window))
+
+# Dividing the trainset into trainset_train & trainset_validation
+set.seed(100)
+inTrain<-createDataPartition(trainset$classe,p=0.7,list=FALSE)
+trainset_train<-trainset[inTrain,]
+trainset_test<-trainset[-inTrain,]
+
+trainset_train$classe<-as.factor(trainset_train$classe)
+trainset_test$classe<-as.factor(trainset_test$classe)
+
+# Omitting zero and near zero-variance predictor
+nearZeroVar(trainset_train,saveMetrics = TRUE)
+
+# preprocessing to range from 0 to 1
+y<-trainset_train$classe
+preProcess_trainset_range<-preProcess(trainset_train,method="range")
+trainset_train <- predict(preProcess_trainset_range, newdata = trainset_train)
+trainset_train$classe <- y
+
+# preprocessing the test set as above
+trainset_test<-predict(preProcess_trainset_range,newdata=trainset_test)
+
+control <- trainControl(method="cv", number=3, verboseIter=F)
+
+# Building the predictive model by random forest, decision tree, generalized boosted model
+#-1 randomforest
+set.seed(1001)
+mode_rf<-train(classe~.,data=trainset_train,method="ranger",trControl=control,tuneLength=5)
+pred_rf<-predict(mode_rf,trainset_test)
+confm_rf<-confusionMatrix(pred_rf,trainset_test$classe)
+confm_rf
+
+#-2 decisions tree
+set.seed(1001)
+mode_dt<-train(classe~.,data=trainset_train,method="rpart",trControl=control,tuneLength=5)
+fancyRpartPlot(mode_dt$finalModel)
+pred_dt<-predict(mode_dt,trainset_test)
+confm_dt<-confusionMatrix(pred_dt,trainset_test$classe)
+confm_dt
+
+#-3 extreme gradient boosting
+set.seed(1001)
+mode_xgb<-train(classe~.,data=trainset_train,method="xgbTree",trControl=control,tuneLength=5)
+pred_xgb<-predict(mode_xgb,trainset_test)
+confm_xgb<-confusionMatrix(pred_xgb,trainset_test$classe)
+confm_xgb
+
+#-4 support vector machine
+set.seed(1001)
+mode_svm<-train(classe~.,data=trainset_train,method="svmLinear",trControl=control,tuneLength=5)
+pred_svm<-predict(mode_svm,trainset_test)
+confm_svm<-confusionMatrix(pred_svm,trainset_test$classe)
+confm_svm
+
+# We chose extreme gradient boosting as the final model
+testset<-predict(preProcess_trainset_range,newdata=testset)
+pred_test<-predict(mode_rf,testset)
+pred_test
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
